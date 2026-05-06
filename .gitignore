@@ -1,3 +1,8 @@
 __pycache__/
 chrome_profile/
 log_report.csv
+dist/
+build/
+*.spec
+message.txt
+numbers.txt
