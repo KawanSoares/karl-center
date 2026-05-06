@@ -8,6 +8,7 @@ from time import sleep
 from urllib.parse import quote
 import os
 import random
+import sys
 import csv
 from datetime import datetime
 
@@ -42,7 +43,10 @@ def run_bulk_messages(numbers, message, batch_limit, min_delay, max_delay, test_
         try:
             options = Options()
             options.add_experimental_option("excludeSwitches", ["enable-logging"])
-            script_dir = os.path.dirname(os.path.realpath(__file__))
+            if getattr(sys, "frozen", False):
+                script_dir = os.path.dirname(sys.executable)
+            else:
+                script_dir = os.path.dirname(os.path.realpath(__file__))
             options.add_argument(f"--user-data-dir={os.path.join(script_dir, 'chrome_profile')}")
             
             driver = webdriver.Chrome(options=options)

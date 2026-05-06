@@ -1,7 +1,14 @@
 import customtkinter as ctk
 import os
+import sys
 import threading
 from automator import run_bulk_messages
+
+
+def _data_dir():
+    if getattr(sys, "frozen", False):
+        return os.path.dirname(sys.executable)
+    return os.path.dirname(os.path.abspath(__file__))
 
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
@@ -66,12 +73,14 @@ class WhatsAppAutomatorGUI(ctk.CTk):
         self.load_data()
 
     def load_data(self):
-        if os.path.exists("message.txt"):
-            with open("message.txt", "r", encoding="utf-8") as f:
-                self.textbox_msg.insert("0.0", f.read())
-        if os.path.exists("numbers.txt"):
-            with open("numbers.txt", "r", encoding="utf-8") as f:
-                self.textbox_nums.insert("0.0", f.read())
+        base = _data_dir()
+        for path, box in (
+            (os.path.join(base, "message.txt"), self.textbox_msg),
+            (os.path.join(base, "numbers.txt"), self.textbox_nums),
+        ):
+            if os.path.exists(path):
+                with open(path, "r", encoding="utf-8") as f:
+                    box.insert("0.0", f.read())
 
     def update_log_gui(self, text):
         self.log_view.configure(state="normal")
