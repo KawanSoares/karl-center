@@ -23,33 +23,45 @@ Ferramenta de envio em massa de mensagens via WhatsApp Web, com interface gráfi
 
 ```
 karl-center/
-├── automator.py        # Backend: lógica de envio (Selenium)
-├── gui_automator.py    # Frontend: interface gráfica (customtkinter)
-├── requirements.txt    # Dependências Python
-├── message.txt         # Mensagem a ser enviada (criado por você)
-├── numbers.txt         # Lista de números, um por linha (criado por você)
-└── log_report.csv      # Log gerado automaticamente após o primeiro envio
+├── automator.py                    # Backend: lógica de envio (Selenium)
+├── gui_automator.py                # Frontend: interface gráfica (customtkinter)
+├── installer.py                    # Assistente de instalação (GUI wizard)
+├── build_karl_center_installer.py  # Script de build do instalador
+├── requirements.txt                # Dependências Python
+├── message.txt                     # Mensagem a ser enviada (criado por você)
+├── numbers.txt                     # Lista de números, um por linha (criado por você)
+└── log_report.csv                  # Log gerado automaticamente após o primeiro envio
 ```
 
 ---
 
 ## Instalação
 
-### 1. Pré-requisitos
+### Opção 1 — Instalador compilado (recomendado para usuários finais)
 
-- **Python 3.8+** — [python.org](https://www.python.org/downloads/) (marque "Add Python to PATH" na instalação)
-- **Google Chrome** — necessário para automação via Selenium
+Baixe o instalador correspondente ao seu sistema operacional:
 
-### 2. Clone o repositório
+| Sistema | Arquivo |
+|---------|---------|
+| Windows | `KarlCenterInstaller.exe` |
+| Linux   | `KarlCenterInstaller` |
+
+Execute o arquivo e siga o assistente de instalação. O Google Chrome precisa estar instalado para o programa funcionar.
+
+---
+
+### Opção 2 — Direto do código-fonte (para desenvolvedores)
+
+#### Pré-requisitos
+
+- **Python 3.8+** — [python.org](https://www.python.org/downloads/)
+- **Google Chrome**
+
+#### Clone e instale
 
 ```bash
 git clone <URL_DO_REPOSITORIO>
 cd karl-center
-```
-
-### 3. Instale as dependências
-
-```bash
 pip install -r requirements.txt
 ```
 
@@ -115,6 +127,47 @@ Após cada execução, o arquivo `log_report.csv` é criado/atualizado com:
 | 2026-05-05 10:30:00 | 5511987654321 | SUCCESS | |
 | 2026-05-05 10:31:15 | 5521000000000 | FAILURE | timeout |
 | 2026-05-05 10:32:00 | 5511999999999 | SIMULATED | |
+
+---
+
+## Build do Instalador (para desenvolvedores)
+
+O script `build_karl_center_installer.py` gera o instalador compilado para a plataforma atual.
+Cada desenvolvedor compila para o seu próprio sistema operacional — não há cross-compilation.
+
+### Windows
+
+```bash
+python build_karl_center_installer.py
+```
+
+Saída: `dist/KarlCenterInstaller.exe`
+
+### Linux / WSL
+
+#### Pré-requisitos (primeira vez)
+
+```bash
+# Dependências de build do Tcl/Tk e Python shared lib
+sudo apt install tk-dev tcl-dev libffi-dev libssl-dev libbz2-dev \
+  libreadline-dev libsqlite3-dev liblzma-dev zlib1g-dev
+
+# Instalar pyenv
+curl https://pyenv.run | bash
+source ~/.zshrc
+
+# Instalar Python com shared lib habilitada
+PYTHON_CONFIGURE_OPTS="--enable-shared" pyenv install 3.12.4
+pyenv local 3.12.4
+```
+
+#### Build
+
+```bash
+python build_karl_center_installer.py
+```
+
+Saída: `dist/KarlCenterInstaller`
 
 ---
 
