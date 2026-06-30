@@ -15,9 +15,16 @@ from datetime import datetime
 # Configurações padrão
 LOG_FILE = "log_report.csv"
 
-class style():
-    RED = '\033[31m'; GREEN = '\033[32m'; YELLOW = '\033[33m'
-    BLUE = '\033[34m'; MAGENTA = '\033[35m'; CYAN = '\033[36m'; RESET = '\033[0m'
+
+class style:
+    RED = "\033[31m"
+    GREEN = "\033[32m"
+    YELLOW = "\033[33m"
+    BLUE = "\033[34m"
+    MAGENTA = "\033[35m"
+    CYAN = "\033[36m"
+    RESET = "\033[0m"
+
 
 def log_result(phone, status, error=""):
     if not os.path.isfile(LOG_FILE):
@@ -26,10 +33,22 @@ def log_result(phone, status, error=""):
             writer.writerow(["timestamp", "phone_number", "status", "error"])
     with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
-        writer.writerow([datetime.now().strftime("%Y-%m-%d %H:%M:%S"), phone, status, error])
+        writer.writerow(
+            [datetime.now().strftime("%Y-%m-%d %H:%M:%S"), phone, status, error]
+        )
 
-def run_bulk_messages(numbers, message, batch_limit, min_delay, max_delay, test_mode=False, log_callback=None):
+
+def run_bulk_messages(
+    numbers,
+    message,
+    batch_limit,
+    min_delay,
+    max_delay,
+    test_mode=False,
+    log_callback=None,
+):
     """Função principal que pode ser chamada pela GUI ou via terminal"""
+
     def report(text, color_code=style.RESET):
         if log_callback:
             log_callback(text)
@@ -47,14 +66,20 @@ def run_bulk_messages(numbers, message, batch_limit, min_delay, max_delay, test_
                 script_dir = os.path.dirname(sys.executable)
             else:
                 script_dir = os.path.dirname(os.path.realpath(__file__))
-            options.add_argument(f"--user-data-dir={os.path.join(script_dir, 'chrome_profile')}")
-            
+            options.add_argument(
+                f"--user-data-dir={os.path.join(script_dir, 'chrome_profile')}"
+            )
+
             driver = webdriver.Chrome(options=options)
             report("Abrindo WhatsApp Web...")
-            driver.get('https://web.whatsapp.com')
-            
+            driver.get("https://web.whatsapp.com")
+
             if not log_callback:
-                input(style.MAGENTA + "Após logar, pressione ENTER no terminal..." + style.RESET)
+                input(
+                    style.MAGENTA
+                    + "Após logar, pressione ENTER no terminal..."
+                    + style.RESET
+                )
             else:
                 report("Aguardando login (detectando painel lateral)...")
                 while True:
@@ -69,7 +94,7 @@ def run_bulk_messages(numbers, message, batch_limit, min_delay, max_delay, test_
 
     for idx, number in enumerate(numbers[:batch_limit]):
         report(f"Processando {idx+1}/{batch_limit}: {number}", style.YELLOW)
-        
+
         if test_mode:
             report(f"[TESTE] Mensagem enviada para {number}", style.CYAN)
             log_result(number, "SIMULATED")
@@ -77,16 +102,18 @@ def run_bulk_messages(numbers, message, batch_limit, min_delay, max_delay, test_
             continue
 
         try:
-            url = f'https://web.whatsapp.com/send?phone={number}&text={message_encoded}'
+            url = f"https://web.whatsapp.com/send?phone={number}&text={message_encoded}"
             driver.get(url)
             input_box = WebDriverWait(driver, 40).until(
-                EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true'][@data-tab='10']"))
+                EC.presence_of_element_located(
+                    (By.XPATH, "//div[@contenteditable='true'][@data-tab='10']")
+                )
             )
             sleep(2)
             input_box.send_keys(Keys.ENTER)
             report(f"✅ Sucesso: {number}", style.GREEN)
             log_result(number, "SUCCESS")
-            
+
             if idx < batch_limit - 1:
                 delay = random.randint(min_delay, max_delay)
                 report(f"Aguardando {delay}s...")
@@ -99,10 +126,12 @@ def run_bulk_messages(numbers, message, batch_limit, min_delay, max_delay, test_
         driver.quit()
     report("--- Processo Finalizado ---", style.BLUE)
 
+
 if __name__ == "__main__":
     # Lógica original para funcionamento via comando
-    with open("message.txt", "r", encoding="utf8") as f: msg = f.read()
+    with open("message.txt", "r", encoding="utf8") as f:
+        msg = f.read()
     with open("numbers.txt", "r") as f:
         nums = [line.strip() for line in f.read().splitlines() if line.strip()]
-    
+
     run_bulk_messages(nums, msg, batch_limit=3, min_delay=10, max_delay=20)
