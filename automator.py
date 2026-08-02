@@ -1,5 +1,6 @@
 from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.options import Options as ChromeOptions
+from selenium.webdriver.edge.options import Options as EdgeOptions
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
@@ -58,8 +59,13 @@ def run_bulk_messages(
     message_encoded = quote(message)
 
     if not test_mode:
+        if getattr(sys, "frozen", False):
+            script_dir = os.path.dirname(sys.executable)
+        else:
+            script_dir = os.path.dirname(os.path.realpath(__file__))
+
         try:
-            options = Options()
+            options = ChromeOptions()
 
             # Only needed on machines where Chrome isn't installed via a
             # standard installer (e.g. Scoop), so Selenium Manager can't
@@ -69,21 +75,36 @@ def run_bulk_messages(
                 options.binary_location = custom_binary
 
             options.add_experimental_option("excludeSwitches", ["enable-logging"])
-
-            if getattr(sys, "frozen", False):
-                script_dir = os.path.dirname(sys.executable)
-            else:
-                script_dir = os.path.dirname(os.path.realpath(__file__))
-
-            profile_dir = os.path.join(script_dir, "chrome_profile")
-
-            options.add_argument(f"--user-data-dir={profile_dir}")
+            options.add_argument(
+                f"--user-data-dir={os.path.join(script_dir, 'chrome_profile')}"
+            )
             options.add_argument("--start-maximized")
 
             report("Iniciando Chrome...")
-
             driver = webdriver.Chrome(options=options)
 
+        except Exception as chrome_error:
+            report(
+                f"Chrome indisponível ({chrome_error}). Tentando Edge...",
+                style.YELLOW,
+            )
+
+            try:
+                options = EdgeOptions()
+                options.add_experimental_option("excludeSwitches", ["enable-logging"])
+                options.add_argument(
+                    f"--user-data-dir={os.path.join(script_dir, 'edge_profile')}"
+                )
+                options.add_argument("--start-maximized")
+
+                report("Iniciando Edge...")
+                driver = webdriver.Edge(options=options)
+
+            except Exception as edge_error:
+                report(f"Erro ao iniciar navegador:\n{edge_error}", style.RED)
+                return
+
+        try:
             report("Abrindo WhatsApp Web...")
             driver.get("https://web.whatsapp.com")
 
@@ -99,7 +120,8 @@ def run_bulk_messages(
                 )
 
         except Exception as e:
-            report(f"Erro ao iniciar Chrome:\n{e}", style.RED)
+            report(f"Erro ao abrir WhatsApp Web:\n{e}", style.RED)
+            driver.quit()
             return
 
     for idx, number in enumerate(numbers[:batch_limit]):
