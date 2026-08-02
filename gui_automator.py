@@ -19,7 +19,7 @@ class WhatsAppAutomatorGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
         self.title("Karl Center - WhatsApp Bulk Messenger GUI")
-        self.geometry("800x800")
+        self.geometry("800x950")
         self.running = False
 
         self.grid_columnconfigure((0, 1), weight=1)
@@ -90,6 +90,14 @@ class WhatsAppAutomatorGUI(ctk.CTk):
         self.entry_msg_max.insert(0, "10")
         self.entry_msg_max.grid(row=1, column=4, padx=5)
 
+        self.switch_reload = ctk.CTkSwitch(
+            self.frame_settings,
+            text="Recarregar WhatsApp a cada mensagem (mais confiável, porém mais lento)",
+        )
+        self.switch_reload.grid(
+            row=2, column=0, columnspan=5, padx=10, pady=(0, 10), sticky="w"
+        )
+
         self.log_view = ctk.CTkTextbox(
             self, height=250, state="disabled", fg_color="#1a1a1a", text_color="#00FF00"
         )
@@ -155,11 +163,14 @@ class WhatsAppAutomatorGUI(ctk.CTk):
                 int(self.entry_max.get()),
                 int(self.entry_msg_min.get()),
                 int(self.entry_msg_max.get()),
+                bool(self.switch_reload.get()),
             )
             thread = threading.Thread(target=self.execute, args=args, daemon=True)
             thread.start()
 
-    def execute(self, nums, msgs, batch, contact_min, contact_max, msg_min, msg_max):
+    def execute(
+        self, nums, msgs, batch, contact_min, contact_max, msg_min, msg_max, reload
+    ):
         run_bulk_messages(
             nums,
             msgs,
@@ -168,6 +179,7 @@ class WhatsAppAutomatorGUI(ctk.CTk):
             contact_max,
             msg_min,
             msg_max,
+            reload_between_messages=reload,
             log_callback=self.update_log_gui,
         )
         self.running = False

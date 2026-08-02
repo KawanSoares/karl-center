@@ -5,6 +5,7 @@ from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.webdriver.common.by import By
 from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.common.action_chains import ActionChains
 from time import sleep
 from urllib.parse import quote
 import os
@@ -39,6 +40,43 @@ def split_messages(text):
     return [chunk for chunk in chunks if chunk]
 
 
+def _wait_input_box(driver):
+    return WebDriverWait(driver, 40).until(
+        EC.presence_of_element_located((By.XPATH, "//div[@contenteditable='true']"))
+    )
+
+
+def _send_via_reload(driver, number, message):
+    """Opens WhatsApp's send link with the message prefilled via URL, then
+    presses Enter. Reliable for multi-line text, but reloads the page for
+    every message."""
+    url = f"https://web.whatsapp.com/send?phone={number}&text={quote(message)}"
+    driver.get(url)
+
+    input_box = _wait_input_box(driver)
+    sleep(2)
+    input_box.send_keys(Keys.ENTER)
+
+
+def _send_via_typing(driver, message):
+    """Types directly into the already-open chat, without reloading the
+    page. Newlines are sent as Shift+Enter so they don't trigger an early
+    send, with a final plain Enter to send the whole message."""
+    input_box = _wait_input_box(driver)
+    sleep(2)
+
+    lines = message.split("\n")
+    for i, line in enumerate(lines):
+        if line:
+            input_box.send_keys(line)
+        if i < len(lines) - 1:
+            ActionChains(driver).key_down(Keys.SHIFT).send_keys(Keys.ENTER).key_up(
+                Keys.SHIFT
+            ).perform()
+
+    input_box.send_keys(Keys.ENTER)
+
+
 def log_result(phone, status, error=""):
     if not os.path.isfile(LOG_FILE):
         with open(LOG_FILE, "w", newline="", encoding="utf-8") as f:
@@ -60,6 +98,7 @@ def run_bulk_messages(
     contact_max_delay,
     message_min_delay,
     message_max_delay,
+    reload_between_messages=False,
     test_mode=False,
     log_callback=None,
 ):
@@ -154,24 +193,15 @@ def run_bulk_messages(
 
         try:
 
+            if not reload_between_messages:
+                driver.get(f"https://web.whatsapp.com/send?phone={number}")
+
             for msg_idx, message in enumerate(messages):
 
-                url = (
-                    f"https://web.whatsapp.com/send"
-                    f"?phone={number}&text={quote(message)}"
-                )
-
-                driver.get(url)
-
-                input_box = WebDriverWait(driver, 40).until(
-                    EC.presence_of_element_located(
-                        (By.XPATH, "//div[@contenteditable='true']")
-                    )
-                )
-
-                sleep(2)
-
-                input_box.send_keys(Keys.ENTER)
+                if reload_between_messages:
+                    _send_via_reload(driver, number, message)
+                else:
+                    _send_via_typing(driver, message)
 
                 if msg_idx < len(messages) - 1:
                     msg_delay = random.randint(message_min_delay, message_max_delay)
