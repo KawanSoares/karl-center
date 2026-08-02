@@ -10,6 +10,7 @@ def _data_dir():
         return os.path.dirname(sys.executable)
     return os.path.dirname(os.path.abspath(__file__))
 
+
 ctk.set_appearance_mode("System")
 ctk.set_default_color_theme("blue")
 
@@ -29,6 +30,14 @@ class WhatsAppAutomatorGUI(ctk.CTk):
             font=ctk.CTkFont(size=24, weight="bold"),
         )
         self.label_title.grid(row=0, column=0, columnspan=2, pady=20)
+
+        self.label_msg = ctk.CTkLabel(self, text="Mensagem", anchor="w")
+        self.label_msg.grid(row=1, column=0, padx=10, sticky="ew")
+
+        self.label_nums = ctk.CTkLabel(
+            self, text="Números (um por linha, com código do país)", anchor="w"
+        )
+        self.label_nums.grid(row=1, column=1, padx=10, sticky="ew")
 
         self.textbox_msg = ctk.CTkTextbox(self, height=200)
         self.textbox_msg.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
