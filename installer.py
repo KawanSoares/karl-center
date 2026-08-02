@@ -7,6 +7,8 @@ import threading
 import tkinter as tk
 from tkinter import filedialog, ttk
 
+from version import VERSION
+
 if sys.platform == "win32":
     DEFAULT_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "C:\\"), "KarlCenter")
 else:
@@ -25,31 +27,21 @@ TERMOS DE USO — Karl Center WhatsApp Bulk Messenger
 Ao instalar e utilizar este software, você concorda com os seguintes termos:
 
 1. USO RESPONSAVEL
-   Esta ferramenta destina-se exclusivamente ao envio de mensagens para
-   contatos que consentiram em recebe-las. O uso para envio de spam ou
-   mensagens nao solicitadas e de responsabilidade exclusiva do usuario.
+   Esta ferramenta destina-se exclusivamente ao envio de mensagens para contatos que consentiram em recebe-las. O uso para envio de spam ou mensagens nao solicitadas e de responsabilidade exclusiva do usuario.
 
 2. CONFORMIDADE COM O WHATSAPP
-   O uso desta ferramenta pode violar os Termos de Servico do WhatsApp,
-   podendo resultar no banimento da sua conta. O autor nao se responsabiliza
-   por qualquer consequencia decorrente do uso indevido.
+   O uso desta ferramenta pode violar os Termos de Servico do WhatsApp, podendo resultar no banimento da sua conta. O autor nao se responsabiliza por qualquer consequencia decorrente do uso indevido.
 
 3. SEM GARANTIAS
-   O software e fornecido "como esta", sem garantias de qualquer tipo.
-   O autor nao se responsabiliza por danos diretos ou indiretos resultantes
-   do uso deste software.
+   O software e fornecido "como esta", sem garantias de qualquer tipo. O autor nao se responsabiliza por danos diretos ou indiretos resultantes do uso deste software.
 
 4. CODIGO ABERTO
-   Este software e de codigo aberto. Voce pode modifica-lo e distribui-lo
-   livremente, desde que mantenha este aviso de termos.
+   Este software e de codigo aberto. Voce pode modifica-lo e distribui-lo livremente, desde que mantenha este aviso de termos.
 
 5. DEPENDENCIAS EXTERNAS
-   Este software instala automaticamente bibliotecas de terceiros (Selenium,
-   CustomTkinter, WebDriver Manager). Ao aceitar estes termos, voce tambem
-   concorda com as licencas dessas bibliotecas.
+   Este software instala automaticamente bibliotecas de terceiros (Selenium, CustomTkinter, WebDriver Manager). Ao aceitar estes termos, voce tambem concorda com as licencas dessas bibliotecas.
 
-Ao marcar "Li e aceito os termos", voce confirma que leu, entendeu
-e concorda com todas as condicoes acima.
+Ao marcar "Li e aceito os termos", voce confirma que leu, entendeu e concorda com todas as condicoes acima.
 """
 
 
@@ -61,15 +53,19 @@ def get_resource(name):
 class InstallerApp(tk.Tk):
     def __init__(self):
         super().__init__()
-        self.title("Karl Center — Assistente de Instalacao")
+        self.title(f"Karl Center v{VERSION} — Assistente de Instalacao")
         self.geometry("600x480")
         self.resizable(False, False)
         self.configure(bg=BG)
 
-        self.install_path    = tk.StringVar(value=DEFAULT_DIR)
-        self.accepted        = tk.BooleanVar(value=False)
-        self.create_shortcut = tk.BooleanVar(value=True)
-        self.launch_after    = tk.BooleanVar(value=True)
+        self.install_path      = tk.StringVar(value=DEFAULT_DIR)
+        self.accepted          = tk.BooleanVar(value=False)
+        self.create_shortcut   = tk.BooleanVar(value=True)
+        self.create_start_menu = tk.BooleanVar(value=True)
+        self.launch_after      = tk.BooleanVar(value=True)
+
+        self._alt_actions = {}
+        self.bind_all("<Alt-KeyPress>", self._on_alt_key)
 
         self._build_chrome()
         self._pages = [
@@ -89,7 +85,7 @@ class InstallerApp(tk.Tk):
         hdr.pack_propagate(False)
         tk.Label(hdr, text="Karl Center", bg="#111111", fg=ACCENT,
                  font=("Segoe UI", 18, "bold")).pack(side="left", padx=20)
-        tk.Label(hdr, text="Assistente de Instalacao", bg="#111111", fg=MUTED,
+        tk.Label(hdr, text=f"v{VERSION} — Assistente de Instalacao", bg="#111111", fg=MUTED,
                  font=("Segoe UI", 10)).pack(side="left")
 
         self._body = tk.Frame(self, bg=BG)
@@ -101,14 +97,14 @@ class InstallerApp(tk.Tk):
         tk.Frame(ftr, bg="#3a3a3a", height=1).pack(fill="x")
 
         self._btn_back = tk.Button(
-            ftr, text="<- Voltar", command=self._go_back,
+            ftr, text="<- Voltar", command=self._go_back, underline=3,
             bg=PANEL, fg=MUTED, font=("Segoe UI", 9), relief="flat",
             padx=14, pady=7, cursor="hand2",
             activebackground=PANEL, activeforeground=TEXT)
         self._btn_back.pack(side="left", padx=16, pady=10)
 
         self._btn_next = tk.Button(
-            ftr, text="Proximo ->", command=self._go_next,
+            ftr, text="Proximo ->", command=self._go_next, underline=0,
             bg=ACCENT, fg="white", font=("Segoe UI", 10, "bold"),
             relief="flat", padx=20, pady=7, cursor="hand2",
             activebackground="#1a7a38", activeforeground="white")
@@ -118,11 +114,53 @@ class InstallerApp(tk.Tk):
         for w in self._body.winfo_children():
             w.destroy()
 
+    # ── Keyboard mnemonics (Alt+letter) ─────────────────
+    # A single <Alt-KeyPress> binding dispatched by keysym, rather than one
+    # bind_all() per letter - individual <Alt-x> sequences turned out to be
+    # unreliable on Windows without a real Menu widget attached.
+
+    def _on_alt_key(self, event):
+        action = self._alt_actions.get(event.keysym.lower())
+        if action:
+            try:
+                action()
+            except tk.TclError:
+                pass  # widget from a page we've since navigated away from
+
+    def _bind_alt(self, key, callback):
+        self._alt_actions[key.lower()] = callback
+
+    def _bind_back_key(self):
+        # Invoke the button itself (like the other mnemonic-bound widgets)
+        # rather than calling self._go_back() directly, so this still works
+        # correctly if the button's command is ever temporarily overridden
+        # (e.g. the install-error recovery path).
+        self._bind_alt(
+            "v", lambda: self._btn_back.invoke() if str(self._btn_back["state"]) == "normal" else None
+        )
+
+    def _set_next_key(self, key, action=None, underline=0):
+        action = action or self._go_next
+        old = getattr(self, "_next_key", None)
+        if old and old != key:
+            self._alt_actions.pop(old, None)
+        self._next_key = key
+        self._btn_next.config(underline=underline)
+        self._bind_alt(
+            key, lambda: action() if str(self._btn_next["state"]) == "normal" else None
+        )
+
     # ── Navigation ─────────────────────────────────────
 
     def go(self, idx):
         self._current = idx
         self._clear()
+        self._bind_back_key()
+        self._btn_back.config(command=self._go_back)  # heal any error-recovery override
+        if idx == 0:
+            self._btn_back.pack_forget()
+        else:
+            self._btn_back.pack(side="left", padx=16, pady=10)
         self._pages[idx]()
         self._btn_back.config(state="normal" if 0 < idx < 3 else "disabled")
         if idx == 3:
@@ -130,8 +168,12 @@ class InstallerApp(tk.Tk):
             self._btn_back.config(state="disabled")
         elif idx == 4:
             self._btn_next.config(text="Concluir ->", state="normal")
+            self._set_next_key("c")
         else:
             self._btn_next.config(text="Proximo ->", state="normal")
+            self._set_next_key("p")
+            if idx == 1 and not self.accepted.get():
+                self._btn_next.config(state="disabled")
 
     def _go_next(self):
         if self._current == 1 and not self.accepted.get():
@@ -183,12 +225,14 @@ class InstallerApp(tk.Tk):
         def on_toggle():
             self._btn_next.config(state="normal" if self.accepted.get() else "disabled")
 
-        tk.Checkbutton(
-            self._body, text="  Li e aceito os termos de uso",
+        chk_terms = tk.Checkbutton(
+            self._body, text="  Li e aceito os termos de uso", underline=2,
             variable=self.accepted, command=on_toggle,
             bg=BG, fg=TEXT, font=("Segoe UI", 10),
             selectcolor="#333", activebackground=BG, activeforeground=TEXT
-        ).pack(anchor="w", pady=(10, 0))
+        )
+        chk_terms.pack(anchor="w", pady=(10, 0))
+        self._bind_alt("l", chk_terms.invoke)
         self._btn_next.config(state="normal" if self.accepted.get() else "disabled")
 
     def _page_path(self):
@@ -203,19 +247,36 @@ class InstallerApp(tk.Tk):
                  font=("Segoe UI", 10), relief="flat",
                  insertbackground=TEXT).pack(side="left", fill="x", expand=True,
                                              ipady=6, padx=(0, 8))
-        tk.Button(row, text="Procurar...", bg="#444", fg=TEXT, relief="flat",
+        btn_browse = tk.Button(row, text="Procurar...", underline=4,
+                  bg="#444", fg=TEXT, relief="flat",
                   font=("Segoe UI", 9), padx=10, pady=6, cursor="hand2",
-                  command=self._browse).pack(side="right")
+                  command=self._browse)
+        btn_browse.pack(side="right")
+        # "r" collides with Windows' reserved system-menu "Restore"
+        # accelerator and never reaches the app - "u" (proc-U-rar) instead.
+        self._bind_alt("u", btn_browse.invoke)
 
         tk.Frame(self._body, bg="#333", height=1).pack(fill="x", pady=18)
-        tk.Checkbutton(
-            self._body, text="  Criar atalho na Area de Trabalho",
+        chk_shortcut = tk.Checkbutton(
+            self._body, text="  Criar atalho na Area de Trabalho", underline=18,
             variable=self.create_shortcut,
             bg=BG, fg=TEXT, font=("Segoe UI", 10),
             selectcolor="#333", activebackground=BG, activeforeground=TEXT
-        ).pack(anchor="w")
+        )
+        chk_shortcut.pack(anchor="w")
+        self._bind_alt("a", chk_shortcut.invoke)
+
+        chk_start_menu = tk.Checkbutton(
+            self._body, text="  Criar atalho no Menu Iniciar", underline=18,
+            variable=self.create_start_menu,
+            bg=BG, fg=TEXT, font=("Segoe UI", 10),
+            selectcolor="#333", activebackground=BG, activeforeground=TEXT
+        )
+        chk_start_menu.pack(anchor="w")
+        self._bind_alt("m", chk_start_menu.invoke)
+
         tk.Label(self._body,
-                 text="O Google Chrome precisa estar instalado para o programa funcionar.",
+                 text="É recomendado ter o Google Chrome instalado (o Microsoft Edge é usado como alternativa).",
                  bg=BG, fg=MUTED, font=("Segoe UI", 9)).pack(anchor="w", pady=(14, 0))
 
     def _page_installing(self):
@@ -239,12 +300,14 @@ class InstallerApp(tk.Tk):
                  text=f"Karl Center instalado em:\n{self.install_path.get()}",
                  bg=BG, fg=MUTED, font=("Segoe UI", 10)).pack(pady=6)
         tk.Frame(self._body, bg="#333", height=1).pack(fill="x", pady=18)
-        tk.Checkbutton(
-            self._body, text="  Iniciar Karl Center agora",
+        chk_launch = tk.Checkbutton(
+            self._body, text="  Iniciar Karl Center agora", underline=2,
             variable=self.launch_after,
             bg=BG, fg=TEXT, font=("Segoe UI", 10),
             selectcolor="#333", activebackground=BG, activeforeground=TEXT
-        ).pack(anchor="w")
+        )
+        chk_launch.pack(anchor="w")
+        self._bind_alt("i", chk_launch.invoke)
 
     # ── Helpers ────────────────────────────────────────
 
@@ -288,8 +351,8 @@ class InstallerApp(tk.Tk):
                     open(fpath, "w").close()
             self._log_write("Arquivos de dados criados.")
 
-            if self.create_shortcut.get():
-                self._log_write("Criando atalho...")
+            if self.create_shortcut.get() or self.create_start_menu.get():
+                self._log_write("Criando atalhos...")
                 self._make_shortcut(path)
 
             self._pbar.stop()
@@ -300,49 +363,85 @@ class InstallerApp(tk.Tk):
         except Exception as e:
             self._pbar.stop()
             self._log_write(f"ERRO: {e}")
-            self.after(0, lambda: self._btn_next.config(
-                state="normal", text="<- Voltar", command=lambda: self.go(2)))
+
+            def recover():
+                self._btn_next.config(state="disabled", text="Proximo ->", underline=0)
+                self._btn_back.config(state="normal", command=lambda: self.go(2))
+
+            self.after(0, recover)
 
     def _make_shortcut(self, install_path):
         if sys.platform == "win32":
-            exe = os.path.join(install_path, "KarlCenter.exe")
-            desktop = os.path.join(os.environ["USERPROFILE"], "Desktop")
-            lnk = os.path.join(desktop, "Karl Center.lnk")
-            ps = (
-                f'$s=(New-Object -COM WScript.Shell).CreateShortcut("{lnk}");'
-                f'$s.TargetPath="{exe}";'
-                f'$s.WorkingDirectory="{install_path}";'
-                f'$s.Description="Karl Center - WhatsApp Bulk Messenger";'
-                f'$s.Save()'
-            )
-            with tempfile.NamedTemporaryFile(
-                mode="w", suffix=".ps1", delete=False, encoding="utf-8"
-            ) as f:
-                f.write(ps)
-                ps_file = f.name
-            subprocess.run(
-                ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_file],
-                capture_output=True)
-            try:
-                os.remove(ps_file)
-            except Exception:
-                pass
+            if self.create_shortcut.get():
+                self._create_windows_shortcut(install_path, "Desktop")
+            if self.create_start_menu.get():
+                self._create_windows_shortcut(install_path, "Programs")
         else:
             exe = os.path.join(install_path, "KarlCenter")
-            apps_dir = os.path.expanduser("~/.local/share/applications")
-            os.makedirs(apps_dir, exist_ok=True)
-            desktop_file = os.path.join(apps_dir, "KarlCenter.desktop")
-            with open(desktop_file, "w") as f:
-                f.write(
-                    f"[Desktop Entry]\n"
-                    f"Name=Karl Center\n"
-                    f"Exec={exe}\n"
-                    f"Path={install_path}\n"
-                    f"Type=Application\n"
-                    f"Terminal=false\n"
-                    f"Comment=Karl Center - WhatsApp Bulk Messenger\n"
-                )
-            os.chmod(desktop_file, 0o755)
+            desktop_entry = (
+                f"[Desktop Entry]\n"
+                f"Name=Karl Center\n"
+                f"Exec={exe}\n"
+                f"Path={install_path}\n"
+                f"Type=Application\n"
+                f"Terminal=false\n"
+                f"Comment=Karl Center - WhatsApp Bulk Messenger\n"
+            )
+            if self.create_start_menu.get():
+                apps_dir = os.path.expanduser("~/.local/share/applications")
+                os.makedirs(apps_dir, exist_ok=True)
+                menu_file = os.path.join(apps_dir, "KarlCenter.desktop")
+                with open(menu_file, "w") as f:
+                    f.write(desktop_entry)
+                os.chmod(menu_file, 0o755)
+            if self.create_shortcut.get():
+                desktop_file = os.path.expanduser("~/Desktop/KarlCenter.desktop")
+                os.makedirs(os.path.dirname(desktop_file), exist_ok=True)
+                with open(desktop_file, "w") as f:
+                    f.write(desktop_entry)
+                os.chmod(desktop_file, 0o755)
+
+    def _create_windows_shortcut(self, install_path, special_folder):
+        """special_folder is a .NET Environment.SpecialFolder name, e.g.
+        "Desktop" or "Programs" (the Start Menu's per-user Programs folder).
+        Resolving it via PowerShell - rather than assuming a fixed path
+        like %USERPROFILE%\\Desktop - accounts for folders redirected by
+        e.g. OneDrive "Known Folder Move". The existence check also happens
+        inside PowerShell, rather than round-tripping an accented path
+        (e.g. "Área de Trabalho") back through Python's subprocess text
+        decoding."""
+        exe = os.path.join(install_path, "KarlCenter.exe")
+        ps = (
+            f'$folder = [Environment]::GetFolderPath("{special_folder}");'
+            f'$lnk = Join-Path $folder "Karl Center.lnk";'
+            f'$s=(New-Object -COM WScript.Shell).CreateShortcut($lnk);'
+            f'$s.TargetPath="{exe}";'
+            f'$s.WorkingDirectory="{install_path}";'
+            f'$s.Description="Karl Center - WhatsApp Bulk Messenger";'
+            f'$s.Save();'
+            'if (-not (Test-Path $lnk)) {'
+            '    Write-Error "Shortcut not found after Save(): $lnk";'
+            "    exit 1;"
+            "}"
+        )
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".ps1", delete=False, encoding="utf-8"
+        ) as f:
+            f.write(ps)
+            ps_file = f.name
+        result = subprocess.run(
+            ["powershell", "-ExecutionPolicy", "Bypass", "-File", ps_file],
+            capture_output=True, text=True)
+        try:
+            os.remove(ps_file)
+        except Exception:
+            pass
+        if result.returncode != 0:
+            raise RuntimeError(
+                f"Falha ao criar atalho em {special_folder} "
+                f"(codigo {result.returncode}): "
+                f"{result.stderr.strip() or result.stdout.strip()}"
+            )
 
 
 if __name__ == "__main__":

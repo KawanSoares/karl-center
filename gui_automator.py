@@ -5,6 +5,7 @@ import threading
 import tkinter as tk
 from tkinter import filedialog
 from automator import run_bulk_messages, split_messages
+from version import VERSION
 
 
 def _data_dir():
@@ -54,11 +55,13 @@ ctk.set_default_color_theme("blue")
 class WhatsAppAutomatorGUI(ctk.CTk):
     def __init__(self):
         super().__init__()
-        self.title("Karl Center - WhatsApp Bulk Messenger GUI")
+        self.title(f"Karl Center - WhatsApp Bulk Messenger GUI v{VERSION}")
         self.geometry("800x950")
         self.running = False
 
         self.grid_columnconfigure((0, 1), weight=1)
+        self.grid_rowconfigure(2, weight=2)
+        self.grid_rowconfigure(5, weight=1)
 
         self.label_title = ctk.CTkLabel(
             self,
