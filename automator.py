@@ -46,11 +46,20 @@ def _wait_input_box(driver):
     )
 
 
-def _send_via_reload(driver, number, message):
+def _last_visible(elements):
+    """Some elements (e.g. the send button) share the same icon between
+    the regular chat compose bar and the attachment-preview overlay, and
+    DOM order doesn't reliably match which one is actually on screen. Only
+    one is normally visible at a time, so filter by that instead."""
+    visible = [el for el in elements if el.is_displayed()]
+    return visible[-1] if visible else elements[-1]
+
+
+def _send_via_reload(driver, number, text):
     """Opens WhatsApp's send link with the message prefilled via URL, then
     presses Enter. Reliable for multi-line text, but reloads the page for
     every message."""
-    url = f"https://web.whatsapp.com/send?phone={number}&text={quote(message)}"
+    url = f"https://web.whatsapp.com/send?phone={number}&text={quote(text)}"
     driver.get(url)
 
     input_box = _wait_input_box(driver)
@@ -58,14 +67,11 @@ def _send_via_reload(driver, number, message):
     input_box.send_keys(Keys.ENTER)
 
 
-def _send_via_typing(driver, message):
-    """Types directly into the already-open chat, without reloading the
-    page. Newlines are sent as Shift+Enter so they don't trigger an early
-    send, with a final plain Enter to send the whole message."""
-    input_box = _wait_input_box(driver)
-    sleep(2)
-
-    lines = message.split("\n")
+def _type_text(driver, input_box, text):
+    """Types text into a contenteditable box, sending newlines as
+    Shift+Enter so they insert a line break instead of triggering an early
+    send. Does not press the final Enter - callers decide how to submit."""
+    lines = text.split("\n")
     for i, line in enumerate(lines):
         if line:
             input_box.send_keys(line)
@@ -74,7 +80,97 @@ def _send_via_typing(driver, message):
                 Keys.SHIFT
             ).perform()
 
+
+def _send_via_typing(driver, text):
+    """Types directly into the already-open chat, without reloading the
+    page, then presses Enter to send."""
+    input_box = _wait_input_box(driver)
+    sleep(2)
+    _type_text(driver, input_box, text)
     input_box.send_keys(Keys.ENTER)
+
+
+_IMAGE_EXTENSIONS = {".png", ".jpg", ".jpeg", ".gif", ".webp"}
+
+
+# NOTE: not currently called - run_bulk_messages raises before reaching
+# this for attachment messages. Left in place for whoever picks this back
+# up: the caption box and send button in WhatsApp Web's attachment-preview
+# overlay share identical markup with the regular chat's own compose box
+# and send button (no distinguishing attribute found so far), so the two
+# couldn't be told apart reliably. Everything up to opening the preview
+# and attaching the file itself was working.
+def _send_attachment(driver, file_path, caption):
+    """Attaches a file (image/document) to the currently open chat and
+    sends it with an optional caption. WhatsApp Web routes images/videos
+    and documents through separate attach-menu items and file inputs, so
+    the file is classified by extension first."""
+    is_image = os.path.splitext(file_path)[1].lower() in _IMAGE_EXTENSIONS
+
+    attach_button = WebDriverWait(driver, 20).until(
+        EC.element_to_be_clickable(
+            (By.XPATH, "//span[@data-icon='plus' or @data-icon='plus-rounded']")
+        ),
+        "botão de anexar (clip)",
+    )
+    attach_button.click()
+
+    if is_image:
+        # The image/video file input already exists in the DOM as soon as
+        # the attach menu opens. Using it directly - without ever clicking
+        # the "Fotos e vídeos" menu item - avoids triggering WhatsApp's own
+        # click handler, which calls .click() on this same input. Chrome
+        # still honors that as a real user gesture (it happens within the
+        # activation window left by the attach-button click above) and
+        # opens a native OS file dialog Selenium can't see or dismiss.
+        file_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located(
+                (By.XPATH, "//input[@type='file'][contains(@accept, 'image')]")
+            ),
+            "input de arquivo (imagem)",
+        )[-1]
+    else:
+        menu_item = WebDriverWait(driver, 10).until(
+            EC.element_to_be_clickable(
+                (By.XPATH, "//button[@role='menuitem'][@aria-label='Documento']")
+            ),
+            "item de menu 'Documento'",
+        )
+        driver.execute_script("arguments[0].click();", menu_item)
+        sleep(1)
+        file_input = WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located((By.XPATH, "//input[@type='file']")),
+            "input de arquivo (documento)",
+        )[-1]
+
+    file_input.send_keys(os.path.abspath(file_path))
+
+    caption_box = _last_visible(
+        WebDriverWait(driver, 20).until(
+            EC.presence_of_all_elements_located(
+                (By.XPATH, "//div[@contenteditable='true']")
+            ),
+            "caixa de legenda",
+        )
+    )
+    sleep(2)
+    if caption:
+        _type_text(driver, caption_box, caption)
+
+    send_button = _last_visible(
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_all_elements_located(
+                (By.XPATH, "//span[@data-icon='wds-ic-send-filled']")
+            ),
+            "botão de enviar",
+        )
+    )
+    # A coordinate-based click can land on an overlapping layout element
+    # instead of the icon itself, depending on window size. A JS click
+    # dispatches directly to the element regardless of what visually
+    # overlaps it.
+    driver.execute_script("arguments[0].click();", send_button)
+    sleep(2)
 
 
 def log_result(phone, status, error=""):
@@ -198,10 +294,22 @@ def run_bulk_messages(
 
             for msg_idx, message in enumerate(messages):
 
-                if reload_between_messages:
-                    _send_via_reload(driver, number, message)
+                if message["attachment"]:
+                    # Sending attachments reliably requires distinguishing
+                    # WhatsApp Web's attachment-preview caption/send controls
+                    # from the regular chat's, which turned out to share
+                    # identical markup in this build and couldn't be told
+                    # apart consistently. Disabled until that's solved -
+                    # see _send_attachment, which is otherwise ready to use.
+                    raise RuntimeError(
+                        "Envio de anexos (imagens/documentos) ainda não é "
+                        "suportado de forma confiável. Remova o anexo desta "
+                        "mensagem ou envie apenas texto."
+                    )
+                elif reload_between_messages:
+                    _send_via_reload(driver, number, message["text"])
                 else:
-                    _send_via_typing(driver, message)
+                    _send_via_typing(driver, message["text"])
 
                 if msg_idx < len(messages) - 1:
                     msg_delay = random.randint(message_min_delay, message_max_delay)
@@ -236,7 +344,7 @@ def run_bulk_messages(
 if __name__ == "__main__":
 
     with open("message.txt", "r", encoding="utf8") as f:
-        msgs = split_messages(f.read())
+        msgs = [{"text": text, "attachment": None} for text in split_messages(f.read())]
 
     with open("numbers.txt", "r") as f:
         nums = [line.strip() for line in f if line.strip()]
