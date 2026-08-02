@@ -27,6 +27,18 @@ class style:
     RESET = "\033[0m"
 
 
+def split_messages(text):
+    chunks, current = [], []
+    for line in text.splitlines():
+        if line.strip() == "---":
+            chunks.append("\n".join(current).strip())
+            current = []
+        else:
+            current.append(line)
+    chunks.append("\n".join(current).strip())
+    return [chunk for chunk in chunks if chunk]
+
+
 def log_result(phone, status, error=""):
     if not os.path.isfile(LOG_FILE):
         with open(LOG_FILE, "w", newline="", encoding="utf-8") as f:
@@ -42,10 +54,12 @@ def log_result(phone, status, error=""):
 
 def run_bulk_messages(
     numbers,
-    message,
+    messages,
     batch_limit,
-    min_delay,
-    max_delay,
+    contact_min_delay,
+    contact_max_delay,
+    message_min_delay,
+    message_max_delay,
     test_mode=False,
     log_callback=None,
 ):
@@ -56,7 +70,6 @@ def run_bulk_messages(
             print(color_code + text + style.RESET)
 
     driver = None
-    message_encoded = quote(message)
 
     if not test_mode:
         if getattr(sys, "frozen", False):
@@ -129,38 +142,50 @@ def run_bulk_messages(
         report(f"Processando {idx + 1}/{batch_limit}: {number}", style.YELLOW)
 
         if test_mode:
-            report(f"[TESTE] Mensagem enviada para {number}", style.CYAN)
+            report(
+                f"[TESTE] {len(messages)} mensagem(ns) enviada(s) para {number}",
+                style.CYAN,
+            )
 
             log_result(number, "SIMULATED")
 
-            sleep(random.randint(min_delay, max_delay))
+            sleep(random.randint(contact_min_delay, contact_max_delay))
             continue
 
         try:
 
-            url = (
-                f"https://web.whatsapp.com/send"
-                f"?phone={number}&text={message_encoded}"
-            )
+            for msg_idx, message in enumerate(messages):
 
-            driver.get(url)
-
-            input_box = WebDriverWait(driver, 40).until(
-                EC.presence_of_element_located(
-                    (By.XPATH, "//div[@contenteditable='true']")
+                url = (
+                    f"https://web.whatsapp.com/send"
+                    f"?phone={number}&text={quote(message)}"
                 )
-            )
 
-            sleep(2)
+                driver.get(url)
 
-            input_box.send_keys(Keys.ENTER)
+                input_box = WebDriverWait(driver, 40).until(
+                    EC.presence_of_element_located(
+                        (By.XPATH, "//div[@contenteditable='true']")
+                    )
+                )
+
+                sleep(2)
+
+                input_box.send_keys(Keys.ENTER)
+
+                if msg_idx < len(messages) - 1:
+                    msg_delay = random.randint(message_min_delay, message_max_delay)
+
+                    report(f"Aguardando {msg_delay}s entre mensagens...")
+
+                    sleep(msg_delay)
 
             report(f"✅ Sucesso: {number}", style.GREEN)
 
             log_result(number, "SUCCESS")
 
             if idx < batch_limit - 1:
-                delay = random.randint(min_delay, max_delay)
+                delay = random.randint(contact_min_delay, contact_max_delay)
 
                 report(f"Aguardando {delay} segundos...")
 
@@ -181,9 +206,17 @@ def run_bulk_messages(
 if __name__ == "__main__":
 
     with open("message.txt", "r", encoding="utf8") as f:
-        msg = f.read()
+        msgs = split_messages(f.read())
 
     with open("numbers.txt", "r") as f:
         nums = [line.strip() for line in f if line.strip()]
 
-    run_bulk_messages(nums, msg, batch_limit=3, min_delay=10, max_delay=20)
+    run_bulk_messages(
+        nums,
+        msgs,
+        batch_limit=3,
+        contact_min_delay=10,
+        contact_max_delay=20,
+        message_min_delay=5,
+        message_max_delay=10,
+    )

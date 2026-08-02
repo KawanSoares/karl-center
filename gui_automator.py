@@ -2,7 +2,7 @@ import customtkinter as ctk
 import os
 import sys
 import threading
-from automator import run_bulk_messages
+from automator import run_bulk_messages, split_messages
 
 
 def _data_dir():
@@ -31,7 +31,7 @@ class WhatsAppAutomatorGUI(ctk.CTk):
         )
         self.label_title.grid(row=0, column=0, columnspan=2, pady=20)
 
-        self.label_msg = ctk.CTkLabel(self, text="Mensagem", anchor="w")
+        self.label_msg = ctk.CTkLabel(self, text="Mensagens", anchor="w")
         self.label_msg.grid(row=1, column=0, padx=10, sticky="ew")
 
         self.label_nums = ctk.CTkLabel(
@@ -39,15 +39,27 @@ class WhatsAppAutomatorGUI(ctk.CTk):
         )
         self.label_nums.grid(row=1, column=1, padx=10, sticky="ew")
 
-        self.textbox_msg = ctk.CTkTextbox(self, height=200)
-        self.textbox_msg.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        self.messages_container = ctk.CTkScrollableFrame(self, height=200)
+        self.messages_container.grid(row=2, column=0, padx=10, pady=5, sticky="nsew")
+        self.messages_container.grid_columnconfigure(0, weight=1)
+        self.message_boxes = []
 
-        self.textbox_nums = ctk.CTkTextbox(self, height=200)
-        self.textbox_nums.grid(row=2, column=1, padx=10, pady=5, sticky="nsew")
+        self.btn_add_message = ctk.CTkButton(
+            self,
+            text="+ Adicionar Mensagem",
+            command=self.add_message_box,
+            fg_color="#2a2a2a",
+        )
+        self.btn_add_message.grid(row=3, column=0, padx=10, pady=(0, 10), sticky="ew")
+
+        self.textbox_nums = ctk.CTkTextbox(self, height=250)
+        self.textbox_nums.grid(
+            row=2, column=1, rowspan=2, padx=10, pady=5, sticky="nsew"
+        )
 
         self.frame_settings = ctk.CTkFrame(self)
         self.frame_settings.grid(
-            row=3, column=0, columnspan=2, padx=20, pady=20, sticky="ew"
+            row=4, column=0, columnspan=2, padx=20, pady=20, sticky="ew"
         )
 
         self.label_batch = ctk.CTkLabel(self.frame_settings, text="Limite de Envios:")
@@ -56,7 +68,7 @@ class WhatsAppAutomatorGUI(ctk.CTk):
         self.entry_batch.insert(0, "10")
         self.entry_batch.grid(row=0, column=1, padx=10)
 
-        ctk.CTkLabel(self.frame_settings, text="Delays (min/max):").grid(
+        ctk.CTkLabel(self.frame_settings, text="Delay entre Contatos (min/max):").grid(
             row=0, column=2, padx=10
         )
         self.entry_min = ctk.CTkEntry(self.frame_settings, width=50)
@@ -67,29 +79,53 @@ class WhatsAppAutomatorGUI(ctk.CTk):
         self.entry_max.insert(0, "30")
         self.entry_max.grid(row=0, column=4, padx=5)
 
+        ctk.CTkLabel(self.frame_settings, text="Delay entre Mensagens (min/max):").grid(
+            row=1, column=2, padx=10, pady=(0, 10)
+        )
+        self.entry_msg_min = ctk.CTkEntry(self.frame_settings, width=50)
+        self.entry_msg_min.insert(0, "5")
+        self.entry_msg_min.grid(row=1, column=3, padx=5)
+
+        self.entry_msg_max = ctk.CTkEntry(self.frame_settings, width=50)
+        self.entry_msg_max.insert(0, "10")
+        self.entry_msg_max.grid(row=1, column=4, padx=5)
+
         self.log_view = ctk.CTkTextbox(
             self, height=250, state="disabled", fg_color="#1a1a1a", text_color="#00FF00"
         )
         self.log_view.grid(
-            row=4, column=0, columnspan=2, padx=20, pady=10, sticky="nsew"
+            row=5, column=0, columnspan=2, padx=20, pady=10, sticky="nsew"
         )
 
         self.btn_start = ctk.CTkButton(
             self, text="INICIAR ENVIOS", command=self.start_thread, fg_color="#24a148"
         )
-        self.btn_start.grid(row=5, column=0, columnspan=2, pady=20)
+        self.btn_start.grid(row=6, column=0, columnspan=2, pady=20)
 
         self.load_data()
 
+    def add_message_box(self, initial_text=""):
+        box = ctk.CTkTextbox(self.messages_container, height=80)
+        box.grid(row=len(self.message_boxes), column=0, padx=5, pady=5, sticky="ew")
+        if initial_text:
+            box.insert("0.0", initial_text)
+        self.message_boxes.append(box)
+
     def load_data(self):
         base = _data_dir()
-        for path, box in (
-            (os.path.join(base, "message.txt"), self.textbox_msg),
-            (os.path.join(base, "numbers.txt"), self.textbox_nums),
-        ):
-            if os.path.exists(path):
-                with open(path, "r", encoding="utf-8") as f:
-                    box.insert("0.0", f.read())
+
+        msg_path = os.path.join(base, "message.txt")
+        chunks = []
+        if os.path.exists(msg_path):
+            with open(msg_path, "r", encoding="utf-8") as f:
+                chunks = split_messages(f.read())
+        for chunk in chunks or [""]:
+            self.add_message_box(chunk)
+
+        nums_path = os.path.join(base, "numbers.txt")
+        if os.path.exists(nums_path):
+            with open(nums_path, "r", encoding="utf-8") as f:
+                self.textbox_nums.insert("0.0", f.read())
 
     def update_log_gui(self, text):
         self.log_view.configure(state="normal")
@@ -100,7 +136,11 @@ class WhatsAppAutomatorGUI(ctk.CTk):
     def start_thread(self):
         if not self.running:
             self.running = True
-            msg = self.textbox_msg.get("0.0", "end").strip()
+            msgs = [
+                box.get("0.0", "end").strip()
+                for box in self.message_boxes
+                if box.get("0.0", "end").strip()
+            ]
             nums = [
                 n.strip()
                 for n in self.textbox_nums.get("0.0", "end").split("\n")
@@ -109,17 +149,26 @@ class WhatsAppAutomatorGUI(ctk.CTk):
 
             args = (
                 nums,
-                msg,
+                msgs,
                 int(self.entry_batch.get()),
                 int(self.entry_min.get()),
                 int(self.entry_max.get()),
+                int(self.entry_msg_min.get()),
+                int(self.entry_msg_max.get()),
             )
             thread = threading.Thread(target=self.execute, args=args, daemon=True)
             thread.start()
 
-    def execute(self, nums, msg, batch, min_d, max_d):
+    def execute(self, nums, msgs, batch, contact_min, contact_max, msg_min, msg_max):
         run_bulk_messages(
-            nums, msg, batch, min_d, max_d, log_callback=self.update_log_gui
+            nums,
+            msgs,
+            batch,
+            contact_min,
+            contact_max,
+            msg_min,
+            msg_max,
+            log_callback=self.update_log_gui,
         )
         self.running = False
         self.btn_start.configure(text="INICIAR ENVIOS")
