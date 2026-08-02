@@ -31,6 +31,7 @@ def log_result(phone, status, error=""):
         with open(LOG_FILE, "w", newline="", encoding="utf-8") as f:
             writer = csv.writer(f)
             writer.writerow(["timestamp", "phone_number", "status", "error"])
+
     with open(LOG_FILE, "a", newline="", encoding="utf-8") as f:
         writer = csv.writer(f)
         writer.writerow(
@@ -47,8 +48,6 @@ def run_bulk_messages(
     test_mode=False,
     log_callback=None,
 ):
-    """Função principal que pode ser chamada pela GUI ou via terminal"""
-
     def report(text, color_code=style.RESET):
         if log_callback:
             log_callback(text)
@@ -61,77 +60,108 @@ def run_bulk_messages(
     if not test_mode:
         try:
             options = Options()
+
+            # Only needed on machines where Chrome isn't installed via a
+            # standard installer (e.g. Scoop), so Selenium Manager can't
+            # auto-detect it.
+            custom_binary = os.environ.get("KARL_CENTER_CHROME_PATH")
+            if custom_binary:
+                options.binary_location = custom_binary
+
             options.add_experimental_option("excludeSwitches", ["enable-logging"])
+
             if getattr(sys, "frozen", False):
                 script_dir = os.path.dirname(sys.executable)
             else:
                 script_dir = os.path.dirname(os.path.realpath(__file__))
-            options.add_argument(
-                f"--user-data-dir={os.path.join(script_dir, 'chrome_profile')}"
-            )
+
+            profile_dir = os.path.join(script_dir, "chrome_profile")
+
+            options.add_argument(f"--user-data-dir={profile_dir}")
+            options.add_argument("--start-maximized")
+
+            report("Iniciando Chrome...")
 
             driver = webdriver.Chrome(options=options)
+
             report("Abrindo WhatsApp Web...")
             driver.get("https://web.whatsapp.com")
 
             if not log_callback:
                 input(
-                    style.MAGENTA
-                    + "Após logar, pressione ENTER no terminal..."
-                    + style.RESET
+                    style.MAGENTA + "Após fazer login, pressione ENTER..." + style.RESET
                 )
             else:
-                report("Aguardando login (detectando painel lateral)...")
-                while True:
-                    try:
-                        driver.find_element(By.XPATH, '//*[@id="side"]')
-                        break
-                    except:
-                        sleep(2)
+                report("Aguardando login...")
+
+                WebDriverWait(driver, 300).until(
+                    EC.presence_of_element_located((By.ID, "side"))
+                )
+
         except Exception as e:
-            report(f"Erro ao iniciar Chrome: {e}", style.RED)
+            report(f"Erro ao iniciar Chrome:\n{e}", style.RED)
             return
 
     for idx, number in enumerate(numbers[:batch_limit]):
-        report(f"Processando {idx+1}/{batch_limit}: {number}", style.YELLOW)
+
+        report(f"Processando {idx + 1}/{batch_limit}: {number}", style.YELLOW)
 
         if test_mode:
             report(f"[TESTE] Mensagem enviada para {number}", style.CYAN)
+
             log_result(number, "SIMULATED")
+
             sleep(random.randint(min_delay, max_delay))
             continue
 
         try:
-            url = f"https://web.whatsapp.com/send?phone={number}&text={message_encoded}"
+
+            url = (
+                f"https://web.whatsapp.com/send"
+                f"?phone={number}&text={message_encoded}"
+            )
+
             driver.get(url)
+
             input_box = WebDriverWait(driver, 40).until(
                 EC.presence_of_element_located(
-                    (By.XPATH, "//div[@contenteditable='true'][@data-tab='10']")
+                    (By.XPATH, "//div[@contenteditable='true']")
                 )
             )
+
             sleep(2)
+
             input_box.send_keys(Keys.ENTER)
+
             report(f"✅ Sucesso: {number}", style.GREEN)
+
             log_result(number, "SUCCESS")
 
             if idx < batch_limit - 1:
                 delay = random.randint(min_delay, max_delay)
-                report(f"Aguardando {delay}s...")
+
+                report(f"Aguardando {delay} segundos...")
+
                 sleep(delay)
+
         except Exception as e:
+
             report(f"❌ Falha: {number}", style.RED)
+
             log_result(number, "FAILURE", str(e))
 
     if driver:
         driver.quit()
+
     report("--- Processo Finalizado ---", style.BLUE)
 
 
 if __name__ == "__main__":
-    # Lógica original para funcionamento via comando
+
     with open("message.txt", "r", encoding="utf8") as f:
         msg = f.read()
+
     with open("numbers.txt", "r") as f:
-        nums = [line.strip() for line in f.read().splitlines() if line.strip()]
+        nums = [line.strip() for line in f if line.strip()]
 
     run_bulk_messages(nums, msg, batch_limit=3, min_delay=10, max_delay=20)
