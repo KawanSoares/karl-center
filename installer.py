@@ -11,8 +11,11 @@ from version import VERSION
 
 if sys.platform == "win32":
     DEFAULT_DIR = os.path.join(os.environ.get("LOCALAPPDATA", "C:\\"), "KarlCenter")
+    import winreg
 else:
     DEFAULT_DIR = os.path.expanduser("~/.local/share/KarlCenter")
+
+UNINSTALL_KEY = r"Software\Microsoft\Windows\CurrentVersion\Uninstall\KarlCenter"
 
 BG     = "#1a1a1a"
 PANEL  = "#2a2a2a"
@@ -351,6 +354,12 @@ class InstallerApp(tk.Tk):
                     open(fpath, "w").close()
             self._log_write("Arquivos de dados criados.")
 
+            if sys.platform == "win32":
+                self._log_write("Instalando desinstalador...")
+                uninstaller_dst = os.path.join(path, "KarlCenterUninstaller.exe")
+                shutil.copy2(get_resource("KarlCenterUninstaller.exe"), uninstaller_dst)
+                self._register_uninstaller(path, uninstaller_dst)
+
             if self.create_shortcut.get() or self.create_start_menu.get():
                 self._log_write("Criando atalhos...")
                 self._make_shortcut(path)
@@ -369,6 +378,25 @@ class InstallerApp(tk.Tk):
                 self._btn_back.config(state="normal", command=lambda: self.go(2))
 
             self.after(0, recover)
+
+    def _register_uninstaller(self, install_path, uninstaller_exe):
+        """Registers KarlCenter under HKCU so it shows up in Windows'
+        "Apps & Features" with a working Uninstall button. HKCU (not HKLM)
+        matches this being a per-user, no-admin-required install."""
+        with winreg.CreateKey(winreg.HKEY_CURRENT_USER, UNINSTALL_KEY) as key:
+            winreg.SetValueEx(key, "DisplayName", 0, winreg.REG_SZ, "Karl Center")
+            winreg.SetValueEx(key, "DisplayVersion", 0, winreg.REG_SZ, VERSION)
+            winreg.SetValueEx(key, "Publisher", 0, winreg.REG_SZ, "Karl Center")
+            winreg.SetValueEx(key, "InstallLocation", 0, winreg.REG_SZ, install_path)
+            winreg.SetValueEx(
+                key, "UninstallString", 0, winreg.REG_SZ, f'"{uninstaller_exe}"'
+            )
+            winreg.SetValueEx(
+                key, "DisplayIcon", 0, winreg.REG_SZ,
+                os.path.join(install_path, "KarlCenter.exe"),
+            )
+            winreg.SetValueEx(key, "NoModify", 0, winreg.REG_DWORD, 1)
+            winreg.SetValueEx(key, "NoRepair", 0, winreg.REG_DWORD, 1)
 
     def _make_shortcut(self, install_path):
         if sys.platform == "win32":

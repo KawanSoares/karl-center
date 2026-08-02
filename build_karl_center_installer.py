@@ -66,8 +66,16 @@ def main():
     print(f"  Plataforma: {'windows' if is_windows else 'linux'}")
     print("=" * 60)
 
-    print("\n[0/4] Limpando builds anteriores...")
-    for item in ("build", "dist", "KarlCenter.spec", "KarlCenterInstaller.spec"):
+    ext = ".exe" if is_windows else ""
+
+    print("\n[0/5] Limpando builds anteriores...")
+    for item in (
+        "build",
+        "dist",
+        "KarlCenter.spec",
+        "KarlCenterUninstaller.spec",
+        "KarlCenterInstaller.spec",
+    ):
         full = os.path.join(os.getcwd(), item)
         if os.path.isdir(full):
             shutil.rmtree(full, ignore_errors=True)
@@ -77,7 +85,7 @@ def main():
             except PermissionError:
                 print(f"  Aviso: nao foi possivel remover {item} (arquivo em uso?)")
 
-    print("\n[1/4] Instalando dependencias de build...")
+    print("\n[1/5] Instalando dependencias de build...")
     run(
         [
             python_exe,
@@ -90,7 +98,7 @@ def main():
         ]
     )
 
-    print("\n[2/4] Compilando o app (KarlCenter)...")
+    print("\n[2/5] Compilando o app (KarlCenter)...")
     run(
         [
             python_exe,
@@ -123,9 +131,25 @@ def main():
         ]
     )
 
-    print("\n[3/4] Compilando o instalador (KarlCenterInstaller)...")
+    print("\n[3/5] Compilando o desinstalador (KarlCenterUninstaller)...")
+    run(
+        [
+            python_exe,
+            "-m",
+            "PyInstaller",
+            "--noconfirm",
+            "--onefile",
+            "--windowed",
+            "--name",
+            "KarlCenterUninstaller",
+            "uninstaller.py",
+        ]
+    )
+
+    print("\n[4/5] Compilando o instalador (KarlCenterInstaller)...")
     sep = ";" if is_windows else ":"
     app_dir = os.path.join("dist", "KarlCenter")
+    uninstaller_exe = os.path.join("dist", f"KarlCenterUninstaller{ext}")
     run(
         [
             python_exe,
@@ -137,12 +161,18 @@ def main():
             "--name",
             "KarlCenterInstaller",
             f"--add-data={app_dir}{sep}KarlCenter",
+            f"--add-data={uninstaller_exe}{sep}.",
             "installer.py",
         ]
     )
 
-    print("\n[4/4] Limpando arquivos temporarios...")
-    for item in ("build", "KarlCenter.spec", "KarlCenterInstaller.spec"):
+    print("\n[5/5] Limpando arquivos temporarios...")
+    for item in (
+        "build",
+        "KarlCenter.spec",
+        "KarlCenterUninstaller.spec",
+        "KarlCenterInstaller.spec",
+    ):
         full = os.path.join(os.getcwd(), item)
         if os.path.isdir(full):
             shutil.rmtree(full, ignore_errors=True)
@@ -152,7 +182,6 @@ def main():
             except PermissionError:
                 pass
 
-    ext = ".exe" if is_windows else ""
     out = os.path.join("dist", f"KarlCenterInstaller{ext}")
     size_mb = os.path.getsize(out) / 1024 / 1024
     print(f"\n{'=' * 60}")
