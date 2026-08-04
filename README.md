@@ -67,6 +67,20 @@ pip install -r requirements.txt
 
 ---
 
+## Detecção do Chrome
+
+O Karl Center usa o Selenium Manager (nativo do Selenium 4.6+) para localizar automaticamente o Google Chrome instalado na máquina e baixar o driver correspondente. Isso funciona sem nenhuma configuração para instalações padrão do Chrome (instalador oficial do google.com).
+
+Se o Chrome não for encontrado automaticamente — por exemplo, em instalações via Scoop, que não registram o navegador nos caminhos/registro padrão do Windows — defina a variável de ambiente `KARL_CENTER_CHROME_PATH` apontando para o executável do navegador:
+
+```powershell
+[Environment]::SetEnvironmentVariable("KARL_CENTER_CHROME_PATH", "C:\caminho\para\chrome.exe", "User")
+```
+
+É preciso abrir um novo terminal (ou reiniciar a sessão) após definir a variável pela primeira vez para que ela seja reconhecida. Uma vez definida no escopo `User`, ela persiste entre reinicializações do computador — não precisa ser configurada novamente. Quando a variável não está definida, a detecção automática padrão é usada normalmente.
+
+---
+
 ## Como Usar
 
 ### Modo GUI (Recomendado)

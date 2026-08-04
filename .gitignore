@@ -1,5 +1,6 @@
 __pycache__/
 chrome_profile/
+edge_profile/
 log_report.csv
 dist/
 build/
